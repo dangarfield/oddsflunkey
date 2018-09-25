@@ -49,15 +49,19 @@ var init = exports.init = async function () {
 exports.getSessions = async function () {
   return db.get('sessions').value()
 }
+exports.getSession = async function (id) {
+  return db.get('sessions').find({ id: id }).value()
+}
 
 exports.newSession = async function () {
   console.log('Create a new session for today - start')
   let id = hat()
+
   let session = {
     id: id,
-    email: process.env.PERSONAL_EMAIL.replace('(-)', id),
-    betfredUsername: process.env.BETFRED_USERNAME.replace('(-)', id.substring(0, 8)),
-    betfredPassword: 'Pas' + id.substring(0, 6),
+    email: process.env.PERSONAL_EMAIL.replace('(-)', id.substring(0, 8)),
+    username: process.env.BOOK_USERNAME.replace('(-)', id.substring(0, 8)),
+    password: 'Pas' + id.substring(0, 6),
     date: moment(),
     day: moment().format('LL'),
     status: 'NEW',
@@ -82,7 +86,7 @@ let statusComplete = exports.statusComplete = async function (session) {
   session.status = newStatus
   await save(session)
 }
-let statusError = exports.statusError = async function (session) {
+exports.statusError = async function (session) {
   session.status = session.status + '_ERROR'
   await save(session)
 }

@@ -17,23 +17,33 @@ var init = async function () {
   let sessions = await dao.getSessions()
   // console.log('sessions', sessions)
   // Resume active sessions
-  _.forEach(sessions, function (session) {
-    resumeSession(session)
+  _.forEach(sessions, async function (session) {
+    let chainNextStep = false
+    do {
+      chainNextStep = await resumeSession(session)
+    }
+    while (chainNextStep)
   })
 }
 
 var resumeSession = async function (session) {
+  session = await dao.getSession(session.id)
   console.log('resume session start', session.id, session.status)
+  let chainNextStep = false
   switch (session.status) {
     case 'BOOK_REGISTER':
       console.log('BOOK_REGISTER')
-      actions.BOOK_REGISTER(session, dao)
+      chainNextStep = await actions.BOOK_REGISTER(session, dao)
       break
-
+    case 'BOOK_DEPOSIT':
+      console.log('BOOK_DEPOSIT')
+      chainNextStep = await actions.BOOK_DEPOSIT(session, dao)
+      break
     default:
       console.error('Unknown status: ', session.status, session)
       break
   }
+  return chainNextStep
 }
 
 init()

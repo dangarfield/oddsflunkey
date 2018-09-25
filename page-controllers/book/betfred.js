@@ -3,10 +3,13 @@ const _ = require('lodash')
 
 let page
 
+var sleep = async function (s) {
+  return new Promise(resolve => setTimeout(resolve, s * 1000))
+}
 var init = async function () {
   if (!page) {
     console.log('betfred - init - start')
-    let path = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    let path = process.env.CHROME_PATH
     const browser = await puppeteer.launch({headless: false, executablePath: path})
     // const browser = await puppeteer.launch({headless: false})
     page = await browser.newPage()
@@ -14,7 +17,8 @@ var init = async function () {
   }
 }
 
-var registerV1 = async function (session) {
+exports.register = async function (session) {
+  await init()
   console.log('betfred - register v1 - start')
 
   // http://promotions.betfred.com/n/ppc/sports/football/2018-Season/bet-10-get-30/?siteid=14123&gclid=EAIaIQobChMIhsf4gOPE3QIVqrftCh1nywCAEAAYASAAEgJe3_D_BwE
@@ -26,13 +30,13 @@ var registerV1 = async function (session) {
 
   // PAGE 1 - Account
 
-  console.log('type username', session.betfredUsername)
+  console.log('type username', session.username)
   await page.waitForSelector('#username')
-  await page.type('#username', session.betfredUsername)
+  await page.type('#username', session.username)
   await page.screenshot({path: 'debug/' + session.id + '/betfred-register-02.png', fullPage: true})
 
-  console.log('type username', session.betfredPassword)
-  await page.type('#password', session.betfredPassword)
+  console.log('type username', session.password)
+  await page.type('#password', session.password)
   await page.screenshot({path: 'debug/' + session.id + '/betfred-register-03.png', fullPage: true})
 
   console.log('click terms')
@@ -169,83 +173,129 @@ var registerV1 = async function (session) {
   })
   await page.screenshot({path: 'debug/' + session.id + '/betfred-register-21.png', fullPage: true})
 
-  console.log('betfred - register v1 - end')
+  await page.waitForSelector('.registration-success__icon')
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-22.png', fullPage: true})
+  let url = page.url()
+  if (!url.includes('register/success')) {
+    throw new Error('Registration url is incorrect - ' + url)
+  }
+  console.log('betfred - register - end')
 }
-var sleep = async function (s) {
-  return new Promise(resolve => setTimeout(resolve, s * 1000))
-}
-var registerV2 = async function (session) {
-  console.log('betfred - register v2 - start')
 
-  // http://promotions.betfred.com/n/ppc/sports/football/2018-Season/bet-10-get-30/?siteid=14123&gclid=EAIaIQobChMIhsf4gOPE3QIVqrftCh1nywCAEAAYASAAEgJe3_D_BwE
-  // https://www.betfred.com/account/registration?promo=PPC30&mred=https://betfred.mobi/register?promo=MPPC30
-
-  // Page 1 - Go through proxy
-
-  // await page.goto('https://www.betfred.com/account/registration?promo=PPC30&mred=https://betfred.mobi/register?promo=MPPC30')
-  // await sleep(2)
-
-  await page.goto('https://hide.me/en/proxy')
-  console.log('type url', 'https://www.betfred.com/account/registration?promo=PPC30&mred=https://betfred.mobi/register?promo=MPPC30')
-  await page.type('#u', 'https://www.betfred.com/account/registration?promo=PPC30&mred=https://betfred.mobi/register?promo=MPPC30')
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-01.png', fullPage: true})
-
-  console.log('click visit')
-  await page.evaluate(() => {
-    document.querySelector('#hide_register_save').click()
+var loginIfRequired = async function (session) {
+  console.log('is login required?')
+  await sleep(2)
+  let userInfoElement = await page.evaluate(() => {
+    return document.querySelector('.AccountMenu__UserInfo')
   })
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-02.png', fullPage: true})
+  if (userInfoElement) {
+    console.log('User already logged in')
+  } else {
+    console.log('User not logged in')
 
-  // Page 2 - Enter Registration Data
-  await page.type('#Forename', process.env.PERSONAL_NAME_FIRST)
-  await page.type('#Surname', process.env.PERSONAL_NAME_LAST)
-  await page.type('#EmailAddress', session.email)
-  await page.type('#PhoneNumber', '0' + process.env.PERSONAL_PHONE)
-  await page.type('#PostCode1', process.env.PERSONAL_ADDRESS_POSTCODE)
-  await page.type('#UserName', session.betfredUsername)
-  await page.type('#Password', session.betfredPassword)
-  await page.type('#SecurityAnswer', process.env.PERSONAL_MOTHER)
-  await page.type('#PromoCode', process.env.BETFRED_PROMO)
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-03.png', fullPage: true})
+    console.log('login page')
+    await page.waitForSelector('#username')
+    await page.type('#username', session.username)
+    await page.type('#password', session.password)
+    await page.evaluate(() => {
+      document.querySelector('#remember').click()
+    })
+    await page.screenshot({path: 'debug/' + session.id + '/betfred-login-01.png', fullPage: true})
+    console.log('click login')
+    await page.evaluate(() => {
+      document.querySelector('.login-layout__form-row button').click()
+    })
+    await page.screenshot({path: 'debug/' + session.id + '/betfred-login-02.png', fullPage: true})
 
-  await sleep(5)
-  let dobDay = parseInt(process.env.PERSONAL_DOB_DAY)
-  let dobMonth = parseInt(process.env.PERSONAL_DOB_MONTH)
-  let dobYear = parseInt(process.env.PERSONAL_DOB_YEAR)
+    // TODO - For some reason this is giving a HTTP error when invoking straight from deposit resume, need to check
+  }
+}
+exports.deposit = async function (session) {
+  await init()
+  console.log('betfred - deposit - start')
 
-  await page.evaluate(({dobDay, dobMonth, dobYear}) => {
-    document.querySelector('#DobDay').value = dobDay
-    document.querySelector('#DobMonth').value = dobMonth
-    document.querySelector('#DobYear').value = dobYear
-    document.querySelector('#Country').value = 'GB'
-    document.querySelector('#Currency').value = 'GBP'
-    document.querySelector('#AddressContainer').style.display = 'block'
-    document.querySelector('#DeselectAllPetfreMarketingPreferences').click()
-    document.querySelector('#DeselectAllThirdPartyMarketingPreferences').click()
-    document.querySelector('#AcceptTAndC').click()
+  await page.goto('https://betfred.mobi/my-account/manage-payments', {waitUntil: 'networkidle2'})
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-01.png', fullPage: true})
 
-    document.querySelector('#DeselectAllPetfreMarketingPreferences').click()
-  }, {dobDay, dobMonth, dobYear})
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-04.png', fullPage: true})
+  // PAGE 1 - Safe and secure
 
-  await sleep(2)
-  await page.type('#AddressLine1', process.env.PERSONAL_ADDRESS_NUMBER + ' ' + process.env.PERSONAL_ADDRESS_ROAD)
-  await page.type('#TownCity', process.env.PERSONAL_ADDRESS_TOWN)
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-05.png', fullPage: true})
-
-  await sleep(2)
+  console.log('click safe and secure')
+  await page.waitForSelector('.safe-and-secure')
+  await page.evaluate(() => {
+    document.querySelector('.sas-input__accept-terms').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-02.png', fullPage: true})
   console.log('click next')
   await page.evaluate(() => {
-    document.querySelector('#RegistrationSubmit').click()
+    document.querySelector('.safe-and-secure__deposit').click()
   })
-  await page.screenshot({path: 'debug/' + session.id + '/betfred-register-06.png', fullPage: true})
 
-  console.log('betfred - register v2 - end')
-}
+  // PAGE 2 - login (optional)
+  await loginIfRequired(session)
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-03.png', fullPage: true})
 
-exports.register = async function (session) {
-  await init()
-  await registerV1(session)
+  // PAGE 3 - Manage Payments
+  console.log('click add')
+  await page.evaluate(() => {
+    document.querySelector('#doAdd').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-04.png', fullPage: true})
 
-  return true
+  console.log('click paypal')
+  await page.waitForSelector('#doAddMethod_400')
+  await page.evaluate(() => {
+    document.querySelector('#doAddMethod_400').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-05.png', fullPage: true})
+
+  console.log('add amount', process.env.BETFRED_DEPOSIT)
+  await page.waitForSelector('#amount')
+  await page.type('#amount', process.env.BETFRED_DEPOSIT)
+  await page.evaluate(() => {
+    document.querySelector('#doTransaction').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-06.png', fullPage: true})
+
+  console.log('paypal main screen')
+  await page.waitForSelector('.baslLoginButtonContainer a')
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-07.png', fullPage: true})
+  await page.evaluate(() => {
+    document.querySelector('.baslLoginButtonContainer a').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-08.png', fullPage: true})
+
+  console.log('paypal login email')
+  await page.waitForSelector('#email')
+  await page.type('#email', process.env.PAYPAL_EMAIL)
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-09.png', fullPage: true})
+  await page.evaluate(() => {
+    document.querySelector('#btnNext').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-10.png', fullPage: true})
+
+  console.log('paypal login password')
+  await page.waitForSelector('#password')
+  await page.type('#password', process.env.PAYPAL_PASSWORD)
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-11.png', fullPage: true})
+  await page.evaluate(() => {
+    document.querySelector('#btnLogin').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-12.png', fullPage: true})
+
+  console.log('review button')
+  await page.waitForSelector('.reviewButton button')
+  await page.evaluate(() => {
+    document.querySelector('.reviewButton button').click()
+  })
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-13.png', fullPage: true})
+
+  console.log('confirm paypal')
+  await page.waitForSelector('#confirmButtonTop')
+  await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-14.png', fullPage: true})
+  // await page.evaluate(() => {
+  //   document.querySelector('#confirmButtonTop').click()
+  // })
+  // await page.screenshot({path: 'debug/' + session.id + '/betfred-deposit-15.png', fullPage: true})
+
+  console.log('betfred - deposit - end')
 }
